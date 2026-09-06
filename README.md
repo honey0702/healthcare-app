@@ -2,7 +2,7 @@
 
 A professional healthcare platform that connects **patients**, **doctors**, **hospitals** and **admins** in a single digital space — with transparent pricing, real-time room & doctor availability, and convenient appointment booking.
 
-Built with **React + Vite**. The current version uses a mock backend (browser `localStorage`) so everything works out of the box. A Django backend with REST APIs can be connected later without changing the UI.
+Built with **React + Vite** and a Django REST API. Authentication (patient/doctor registration and mobile + password login) is backed by Django, JWT tokens, and SQLite. The remaining healthcare data features still use the browser `localStorage` mock layer and will be migrated to the API in later phases.
 
 ---
 
@@ -35,10 +35,12 @@ Built with **React + Vite**. The current version uses a mock backend (browser `l
 - **Reviews**, **Send Notifications**, **Wellness Content**, **System Reports** with charts
 
 ### Authentication
-- Register (mobile + password + OTP verification)
-- Login by **mobile + password** **or** **mobile + OTP**
-- Forgot password (verify mobile + OTP)
+- Register as a patient or doctor with mobile + password
+- Patient registration returns JWT tokens immediately
+- Doctor registration is marked pending until admin approval
+- Login by **mobile + password** with JWT access/refresh tokens
 - Role-based access & protected routes
+- Password reset and OTP flows are intentionally deferred to a later API phase
 
 ---
 
@@ -49,8 +51,11 @@ Built with **React + Vite**. The current version uses a mock backend (browser `l
 | Frontend | React 18, React Router v6 |
 | Build | Vite 5 |
 | Styling | Custom CSS (design system + animations) |
-| State | React Context + localStorage (mock backend) |
-| Future backend | Django + REST API (placeholder functions in `src/utils/db.js`) |
+| State | React Context + JWT session storage |
+| Backend | Django 5.2, Django REST Framework, SimpleJWT |
+| API docs | drf-spectacular Swagger UI + ReDoc |
+| Database | SQLite for local development |
+| Remaining data | localStorage mock layer (being migrated incrementally) |
 
 ---
 
@@ -59,19 +64,44 @@ Built with **React + Vite**. The current version uses a mock backend (browser `l
 ### Prerequisites
 - [Node.js](https://nodejs.org/) **v18 or later** (tested on v20)
 - npm (comes with Node)
+- Python **3.11 or later**
 
-### 1. Install dependencies
+### 1. Start the Django backend
+```bash
+cd backend
+python -m venv .venv
+# macOS/Linux
+source .venv/bin/activate
+# Windows PowerShell: .venv\\Scripts\\Activate.ps1
+python -m pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver 0.0.0.0:8000
+```
+
+The backend exposes the authentication API under `/api/auth/`. The default SQLite database is created at `backend/db.sqlite3` and is ignored by Git.
+
+To create the showcase accounts from the old frontend demo, run this once from `backend/`:
+```bash
+python manage.py seed_demo_accounts
+```
+
+### 2. Start the React frontend
+In a second terminal, from the repository root:
 ```bash
 npm install
-```
-
-### 2. Run in development mode
-```bash
 npm run dev
 ```
-Open the URL shown in your terminal — usually **http://localhost:5173**
+Open the URL shown in your terminal — usually **http://localhost:5173**. Vite proxies `/api` requests to Django on port 8000. To use a different backend URL, set `VITE_BACKEND_URL` before starting Vite.
 
-### 3. Build for production
+### 3. API documentation
+With Django running, open:
+- Swagger UI: **http://localhost:8000/api/docs/**
+- ReDoc: **http://localhost:8000/api/redoc/**
+- OpenAPI schema: **http://localhost:8000/api/schema/**
+
+Authentication uses Bearer JWT tokens. `POST /api/auth/register/` returns tokens for patients; doctor registrations are marked `pending` until an admin approves them. `POST /api/auth/login/` returns access and refresh tokens for approved accounts. `GET /api/auth/me/` validates the current access token.
+
+### 4. Build for production
 ```bash
 npm run build
 ```
@@ -92,7 +122,7 @@ The app is seeded with demo accounts so you can test all three roles immediately
 | **Doctor** | `9800000000` | `doctor123` | Approve appointments, availability, reports, earnings |
 | **Admin** | `9900000000` | `admin123` | Approve doctors, manage hospitals/rooms/payments, reports |
 
-> **OTP demo:** wherever an OTP is asked (register / login / forgot password), use **`123456`**.
+Run `python manage.py seed_demo_accounts` from `backend/` to create these accounts in Django. OTP and password-reset demos are no longer enabled in the first API release.
 
 ---
 
@@ -100,6 +130,11 @@ The app is seeded with demo accounts so you can test all three roles immediately
 
 ```
 healthcare-app/
+├── backend/
+│   ├── manage.py
+│   ├── requirements.txt
+│   ├── config/                 # Django project settings and URLs
+│   └── accounts/               # User model + register/login API
 ├── index.html
 ├── package.json
 ├── vite.config.js
@@ -112,10 +147,11 @@ healthcare-app/
     ├── data/
     │   └── mockData.js          # Seed data (hospitals, doctors, rooms…)
     ├── utils/
-    │   ├── db.js                # localStorage "backend" (swap for Django APIs)
+    │   ├── api.js               # Django authentication API client
+    │   ├── db.js                # Remaining localStorage mock data + JWT session
     │   └── toast.js             # Toast notifications
     ├── context/
-    │   └── AuthContext.jsx      # Register / login / session
+    │   └── AuthContext.jsx      # Django register / login / session
     ├── components/
     │   ├── Navbar.jsx  Footer.jsx  ToastStack.jsx
     │   ├── DashboardLayout.jsx  RouteGuard.jsx
@@ -130,32 +166,20 @@ healthcare-app/
 
 ---
 
-## 🔌 Connecting the Django Backend (later)
+## 🔌 Authentication API
 
-All data reads/writes go through **`src/utils/db.js`**. The rest of the app never talks to `localStorage` directly, so you only need to change this one file.
+The first Django API phase is intentionally limited to authentication:
 
-1. Create your Django models mirroring the data shapes in `src/data/mockData.js`.
-2. Add `fetch()` calls inside the functions of `db.js`, e.g.:
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `POST` | `/api/auth/register/` | Create a patient or doctor account |
+| `POST` | `/api/auth/login/` | Authenticate with mobile + password |
+| `GET` | `/api/auth/me/` | Return the authenticated user (`Authorization: Bearer <access-token>`) |
+| `GET` | `/api/docs/` | Interactive Swagger UI |
+| `GET` | `/api/redoc/` | ReDoc API reference |
+| `GET` | `/api/schema/` | OpenAPI schema |
 
-```js
-// instead of: localStorage.getItem(...)
-export const db = {
-  getDoctors: async () => (await fetch('/api/doctors/')).json(),
-  saveDoctors: (data) => fetch('/api/doctors/', { method: 'POST', body: JSON.stringify(data) }),
-  // ...same for every other collection
-}
-```
-
-3. Update `AuthContext.jsx` to hit `/api/auth/login`, `/api/auth/register`, etc.
-4. Add a `proxy` in `vite.config.js` to forward `/api` to your Django server:
-
-```js
-server: {
-  proxy: { '/api': 'http://localhost:8000' }
-}
-```
-
-The UI and routing will keep working unchanged.
+The frontend authentication client lives in `src/utils/api.js`, and JWT session persistence lives in `src/utils/db.js`. The other dashboard data sources continue to use mock data until their Django endpoints are added.
 
 ---
 
@@ -170,4 +194,4 @@ The UI and routing will keep working unchanged.
 ---
 
 ## 📜 License
-Free to use for your project. (This is a frontend demo with mock data — replace with a real backend before production.)
+Free to use for your project. Authentication is backed by Django; the remaining mock data modules should be migrated before production.

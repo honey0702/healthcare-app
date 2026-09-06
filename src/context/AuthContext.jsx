@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
+import { api } from '../utils/api'
 import { db } from '../utils/db'
 import { toast } from '../utils/toast'
 
@@ -9,75 +10,69 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const s = db.getSession()
-    setUser(s)
-    setLoading(false)
+    let mounted = true
+    const session = db.getSession()
+    const accessToken = db.getAccessToken()
+
+    if (!session || !accessToken) {
+      setLoading(false)
+      return () => { mounted = false }
+    }
+
+    // Restore the session from Django instead of trusting stale localStorage data.
+    api.me(accessToken)
+      .then((currentUser) => {
+        if (mounted) {
+          db.saveSession(currentUser)
+          setUser(currentUser)
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          db.clearSession()
+          setUser(null)
+        }
+      })
+      .finally(() => {
+        if (mounted) setLoading(false)
+      })
+
+    return () => { mounted = false }
   }, [])
 
-  const register = (data) => {
-    const users = db.getUsers()
-    if (users.some((u) => u.mobile === data.mobile)) {
-      toast('Mobile number already registered', 'error')
+  const register = async (data) => {
+    try {
+      const result = await api.register(data)
+      if (result.tokens) {
+        db.saveAuth(result)
+        setUser(result.user)
+      }
+      return result.user
+    } catch (error) {
+      toast(error.message, 'error')
       return null
     }
-    const newUser = { id: db.id('u'), ...data, status: data.role === 'doctor' ? 'pending' : 'approved' }
-    db.saveUsers([...users, newUser])
-    if (data.role === 'doctor') {
-      db.saveNotifications([...db.getNotifications(), {
-        id: db.id('n'), userId: 'u-admin', title: 'New doctor registration',
-        message: `${newUser.name} applied to join. Please verify their details.`, read: false, date: new Date().toISOString().slice(0, 10),
-      }])
-    }
-    // Auto-login for non-doctor roles
-    if (data.role !== 'doctor') {
-      db.saveSession(newUser)
-      setUser(newUser)
-    }
-    return newUser
   }
 
-  const login = ({ mobile, password }) => {
-    const users = db.getUsers()
-    const found = users.find((u) => u.mobile === mobile && u.password === password)
-    if (!found) { toast('Invalid mobile number or password', 'error'); return false }
-    if (found.role === 'doctor' && found.status !== 'approved') {
-      toast('Your doctor account is awaiting admin approval', 'error')
-      return false
+  const login = async ({ mobile, password }) => {
+    try {
+      const result = await api.login({ mobile, password })
+      db.saveAuth(result)
+      setUser(result.user)
+      toast(`Welcome back, ${result.user.name.split(' ')[0]}!`)
+      return result.user
+    } catch (error) {
+      toast(error.message, 'error')
+      return null
     }
-    db.saveSession(found)
-    setUser(found)
-    toast(`Welcome back, ${found.name.split(' ')[0]}!`)
-    return true
   }
 
-  const loginOtp = ({ mobile, otp }) => {
-    const users = db.getUsers()
-    const found = users.find((u) => u.mobile === mobile)
-    if (!found) { toast('Mobile number not registered', 'error'); return false }
-    if (otp !== '123456') { toast('Invalid OTP', 'error'); return false }
-    if (found.role === 'doctor' && found.status !== 'approved') {
-      toast('Your doctor account is awaiting admin approval', 'error'); return false
-    }
-    db.saveSession(found)
-    setUser(found)
-    toast('Logged in via OTP')
-    return true
-  }
-
-  const resetPassword = ({ mobile, otp, newPassword }) => {
-    const users = db.getUsers()
-    const found = users.find((u) => u.mobile === mobile)
-    if (!found) { toast('Mobile number not registered', 'error'); return false }
-    if (otp !== '123456') { toast('Invalid OTP', 'error'); return false }
-    const updated = users.map((u) => u.mobile === mobile ? { ...u, password: newPassword } : u)
-    db.saveUsers(updated)
-    toast('Password reset successfully. Please login.')
-    return true
-  }
-
+  // Profile edits and the remaining dashboard features still use the mock data
+  // layer for now. They will move to API endpoints in the next backend phase.
   const updateUser = (patch) => {
+    if (!user) return null
     const users = db.getUsers()
-    const updatedList = users.map((u) => u.id === user.id ? { ...u, ...patch } : u)
+    const updatedList = users.map((item) => item.id === user.id ? { ...item, ...patch } : item)
     db.saveUsers(updatedList)
     const updatedUser = { ...user, ...patch }
     setUser(updatedUser)
@@ -93,7 +88,7 @@ export function AuthProvider({ children }) {
   }
 
   const deleteAccount = () => {
-    const users = db.getUsers().filter((u) => u.id !== user?.id)
+    const users = db.getUsers().filter((item) => item.id !== user?.id)
     db.saveUsers(users)
     db.clearSession()
     setUser(null)
@@ -101,7 +96,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, register, login, loginOtp, resetPassword, updateUser, logout, deleteAccount }}>
+    <AuthContext.Provider value={{ user, loading, register, login, updateUser, logout, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   )
