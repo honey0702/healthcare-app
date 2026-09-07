@@ -67,6 +67,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     college = models.CharField(max_length=200, blank=True)
     experience = models.PositiveIntegerField(null=True, blank=True)
     speciality = models.CharField(max_length=120, blank=True)
+    hospital_name = models.CharField(max_length=200, blank=True)
+    fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    rating = models.DecimalField(max_digits=3, decimal_places=2, default=0)
+    is_available = models.BooleanField(default=True)
 
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)

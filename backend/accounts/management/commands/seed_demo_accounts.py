@@ -1,6 +1,10 @@
+from datetime import timedelta
+
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from accounts.models import User
+from dashboard.models import Appointment, MedicalReport, PatientNotification, Payment
 
 
 class Command(BaseCommand):
@@ -25,6 +29,10 @@ class Command(BaseCommand):
             "college": "AIIMS Delhi",
             "experience": 14,
             "speciality": "Cardiologist",
+            "hospital_name": "City Care Multi-Speciality Hospital",
+            "fee": 800,
+            "rating": 4.8,
+            "is_available": True,
         },
         {
             "mobile": "9700000000",
@@ -51,3 +59,54 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"Created {user.role} demo account: {mobile}"))
             else:
                 self.stdout.write(f"Demo account already exists: {mobile}")
+
+        self.create_demo_dashboard_data()
+
+    def create_demo_dashboard_data(self):
+        patient = User.objects.get(mobile="9700000000")
+        doctor = User.objects.get(mobile="9800000000")
+        today = timezone.localdate()
+
+        appointment, _ = Appointment.objects.get_or_create(
+            patient=patient,
+            doctor=doctor,
+            date=today + timedelta(days=2),
+            time="10:30 AM",
+            defaults={
+                "hospital_name": "City Care Multi-Speciality Hospital",
+                "turn": 3,
+                "status": Appointment.Status.CONFIRMED,
+                "reason": "Chest pain follow-up",
+                "fee": 800,
+            },
+        )
+        MedicalReport.objects.get_or_create(
+            patient=patient,
+            title="Routine Blood Test",
+            defaults={
+                "report_type": "Laboratory",
+                "summary": "All values are within the expected range.",
+                "doctor_name": doctor.name,
+                "report_date": today - timedelta(days=12),
+            },
+        )
+        Payment.objects.get_or_create(
+            patient=patient,
+            reference="PAY-88240",
+            defaults={
+                "amount": 800,
+                "payment_type": "consultation",
+                "status": Payment.Status.PENDING,
+                "method": "—",
+                "date": today,
+            },
+        )
+        PatientNotification.objects.get_or_create(
+            patient=patient,
+            title="Appointment confirmed",
+            defaults={
+                "message": f"Your appointment with {doctor.name} is confirmed for {appointment.time}.",
+                "read": False,
+            },
+        )
+        self.stdout.write(self.style.SUCCESS("Demo patient dashboard data is ready."))

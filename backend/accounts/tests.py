@@ -113,4 +113,5 @@ class AuthenticationApiTests(APITestCase):
 
         self.assertEqual(schema.status_code, status.HTTP_200_OK)
         self.assertIn(b"/api/auth/login/", schema.content)
+        self.assertIn(b"/api/patient/dashboard/", schema.content)
         self.assertEqual(docs.status_code, status.HTTP_200_OK)

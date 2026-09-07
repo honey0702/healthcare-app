@@ -15,7 +15,7 @@ Built with **React + Vite** and a Django REST API. Authentication (patient/docto
 - **Room Availability** — live beds and per-day prices per hospital
 - **Pricing** — transparent service & room costs + insurance partners
 - **Appointment Booking** — pick doctor, date, time slot; get a **turn number**; add to Google Calendar
-- **Patient Dashboard** — My Appointments (upcoming/completed/canceled), Payments (paid, pending, refunds), Medical Reports, Feedback & Reviews, Profile, Notifications, Settings
+- **Patient Dashboard** — API-backed summary cards, next/upcoming appointments, recent payments, medical reports, notifications, recommended doctors, plus My Appointments (upcoming/completed/canceled), Feedback & Reviews, Profile, and Settings
 
 ### Doctor
 - Registration with professional details (**degree, college, experience, speciality**) → goes for **admin verification**
@@ -80,7 +80,7 @@ python manage.py runserver 0.0.0.0:8000
 
 The backend exposes the authentication API under `/api/auth/`. The default SQLite database is created at `backend/db.sqlite3` and is ignored by Git.
 
-To create the showcase accounts from the old frontend demo, run this once from `backend/`:
+To create the showcase accounts and sample patient dashboard records, run this once from `backend/`:
 ```bash
 python manage.py seed_demo_accounts
 ```
@@ -134,7 +134,8 @@ healthcare-app/
 │   ├── manage.py
 │   ├── requirements.txt
 │   ├── config/                 # Django project settings and URLs
-│   └── accounts/               # User model + register/login API
+│   ├── accounts/               # User model + register/login API
+│   └── dashboard/              # Patient home dashboard models and API
 ├── index.html
 ├── package.json
 ├── vite.config.js
@@ -168,18 +169,19 @@ healthcare-app/
 
 ## 🔌 Authentication API
 
-The first Django API phase is intentionally limited to authentication:
+The Django API currently provides authentication and the patient home dashboard:
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
 | `POST` | `/api/auth/register/` | Create a patient or doctor account |
 | `POST` | `/api/auth/login/` | Authenticate with mobile + password |
 | `GET` | `/api/auth/me/` | Return the authenticated user (`Authorization: Bearer <access-token>`) |
+| `GET` | `/api/patient/dashboard/` | Patient home dashboard data (patient JWT required) |
 | `GET` | `/api/docs/` | Interactive Swagger UI |
 | `GET` | `/api/redoc/` | ReDoc API reference |
 | `GET` | `/api/schema/` | OpenAPI schema |
 
-The frontend authentication client lives in `src/utils/api.js`, and JWT session persistence lives in `src/utils/db.js`. The other dashboard data sources continue to use mock data until their Django endpoints are added.
+The frontend API client lives in `src/utils/api.js`, and JWT session persistence lives in `src/utils/db.js`. The patient home page now loads its dashboard data from Django; the other dashboard pages continue to use mock data until their Django endpoints are added.
 
 ---
 

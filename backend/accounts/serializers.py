@@ -25,6 +25,10 @@ class UserSerializer(serializers.ModelSerializer):
             "college",
             "experience",
             "speciality",
+            "hospital_name",
+            "fee",
+            "rating",
+            "is_available",
             "created_at",
         )
         read_only_fields = ("id", "role", "status", "created_at")
