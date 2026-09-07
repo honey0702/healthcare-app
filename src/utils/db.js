@@ -1,8 +1,7 @@
 /* ============================================================
-   Temporary DB layer using localStorage.
-   When the Django backend + REST API is ready, replace the
-   functions here with fetch() calls to your endpoints. The rest
-   of the app will keep working unchanged.
+   Temporary localStorage layer for dashboard data that is not in
+   the Django API yet. Authentication tokens and the current user
+   session are stored here until a refresh-token endpoint is added.
    ============================================================ */
 import { seedHospitals, seedDoctors, seedRooms, seedPrices, seedInsurances, seedWellness } from '../data/mockData'
 
@@ -15,6 +14,8 @@ const KEYS = {
   wellness: 'mc_wellness',
   users: 'mc_users',
   sessions: 'mc_session',
+  accessToken: 'mc_access_token',
+  refreshToken: 'mc_refresh_token',
   appointments: 'mc_appointments',
   reviews: 'mc_reviews',
   reports: 'mc_reports',
@@ -114,7 +115,18 @@ export const db = {
 
   getSession: () => read(KEYS.sessions, null),
   saveSession: (user) => write(KEYS.sessions, user),
-  clearSession: () => localStorage.removeItem(KEYS.sessions),
+  saveAuth: ({ user, tokens }) => {
+    write(KEYS.sessions, user)
+    if (tokens?.access) localStorage.setItem(KEYS.accessToken, tokens.access)
+    if (tokens?.refresh) localStorage.setItem(KEYS.refreshToken, tokens.refresh)
+  },
+  getAccessToken: () => localStorage.getItem(KEYS.accessToken),
+  getRefreshToken: () => localStorage.getItem(KEYS.refreshToken),
+  clearSession: () => {
+    localStorage.removeItem(KEYS.sessions)
+    localStorage.removeItem(KEYS.accessToken)
+    localStorage.removeItem(KEYS.refreshToken)
+  },
 
   id: (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
 }
